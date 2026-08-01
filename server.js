@@ -28,7 +28,7 @@ const port = parseInt(process.env.PORT || '3000', 10);
 
 const CODE_CHARS          = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 const CODE_LENGTH         = 6;
-const CODE_TTL_MS         = 5 * 60 * 1000;   // 5 min
+const CODE_TTL_MS         = 5 * 60 * 1000;   // 5 min code lifetime
 const RATE_LIMIT_MAX      = 10;               // codes per window per IP
 const RATE_LIMIT_WINDOW   = 60 * 1000;        // 1 min
 
@@ -78,11 +78,11 @@ function safeSend(ws, payload) {
 setInterval(() => {
   const now = Date.now();
 
-  // Expire old rooms
+  // Expire old rooms that have not been joined yet
   for (const [code, room] of rooms) {
+    if (room.receiver) continue;
     if (now - room.createdAt > CODE_TTL_MS) {
-      safeSend(room.sender,   { type: 'error', message: 'Room expired (5 min time limit).' });
-      safeSend(room.receiver, { type: 'error', message: 'Room expired (5 min time limit).' });
+      safeSend(room.sender, { type: 'error', message: 'Room code expired (5 min limit).' });
       rooms.delete(code);
     }
   }

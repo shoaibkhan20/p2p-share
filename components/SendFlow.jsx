@@ -109,8 +109,21 @@ export default function SendFlow() {
     setError('');
   }
 
-  // Unmount safety
-  useEffect(() => () => closeAll(), []);
+  // Unmount safety and leave confirmation while active
+  useEffect(() => {
+    const handleBeforeUnload = (event) => {
+      if (wsRef.current?.readyState === WebSocket.OPEN || dcRef.current?.readyState === 'open') {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      closeAll();
+    };
+  }, []);
 
   // ── WebRTC peer connection setup ──────────────────────────────────────────
 

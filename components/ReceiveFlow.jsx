@@ -57,7 +57,19 @@ export default function ReceiveFlow() {
   // ── Feature detection (client-only) ──────────────────────────────────────
   useEffect(() => {
     setFsaSupported(typeof window !== 'undefined' && 'showSaveFilePicker' in window);
-    return () => closeAll();   // cleanup on unmount
+
+    const handleBeforeUnload = (event) => {
+      if (wsRef.current?.readyState === WebSocket.OPEN || dcRef.current?.readyState === 'open') {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      closeAll();   // cleanup on unmount
+    };
   }, []);
 
   // ── Cleanup ───────────────────────────────────────────────────────────────

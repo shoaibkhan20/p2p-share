@@ -58,12 +58,10 @@ export default function HomePage() {
 
           <div className="hero-ctas">
             <Link href="/send" className="btn-hero-send">
-              <span>📤</span>
-              <span>Send a File</span>
+              Send a File
             </Link>
             <Link href="/receive" className="btn-hero-receive">
-              <span>📥</span>
-              <span>Receive a File</span>
+              Receive a File
             </Link>
           </div>
         </section>

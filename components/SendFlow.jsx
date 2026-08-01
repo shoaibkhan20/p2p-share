@@ -443,7 +443,7 @@ export default function SendFlow() {
           </div>
 
           <button className="btn-copy" onClick={copyCode}>
-            {copied ? '✓ Copied!' : '📋 Copy Code'}
+            {copied ? '✓ Copied!' : 'Copy Code'}
           </button>
 
           <div className="status-indicator waiting">
@@ -482,7 +482,7 @@ export default function SendFlow() {
           <p className="flow-desc mt-2">Choose one or more files to send over the same connection:</p>
           <label className="file-picker mt-2">
             <input type="file" multiple onChange={onFileChange} />
-            <span className="file-picker-btn">📁 Choose Files</span>
+            <span className="file-picker-btn">Choose Files</span>
           </label>
           {queueCount > 0 && (
             <p className="flow-desc-sm mt-2">{queueCount} file(s) queued to send</p>

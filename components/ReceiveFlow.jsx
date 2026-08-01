@@ -515,7 +515,7 @@ export default function ReceiveFlow() {
           )}
 
           <button className="btn-primary mt-4" onClick={acceptTransfer}>
-            {fsaSupported ? '💾 Save File…' : '📥 Accept & Download'}
+            {fsaSupported ? 'Save File…' : 'Accept & Download'}
           </button>
         </div>
       )}

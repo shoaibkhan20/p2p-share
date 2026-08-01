@@ -8,40 +8,51 @@ input                    { font-family: inherit; }
 /* ─── Design Tokens ───────────────────────────────────────────────────────── */
 :root {
   /* Backgrounds */
-  --bg:          #07071a;
-  --bg-mid:      #0c0c24;
-  --card:        #10102a;
-  --card-hi:     #14143a;
+  --bg:          #f7f8fb;
+  --bg-mid:      #edf2f7;
+  --card:        #ffffff;
+  --card-hi:     #f8fafc;
 
   /* Borders */
-  --border:      rgba(99, 102, 241, 0.18);
-  --border-hi:   rgba(99, 102, 241, 0.45);
+  --border:      rgba(15, 23, 42, 0.08);
+  --border-hi:   rgba(15, 23, 42, 0.12);
 
   /* Text */
-  --txt:         #e4e4f4;
-  --txt-muted:   #7272a8;
-  --txt-dim:     #3a3a66;
+  --txt:         #111827;
+  --txt-muted:   #4b5563;
+  --txt-dim:     #6b7280;
 
-  /* Accent — indigo */
-  --accent:      #6366f1;
-  --accent-lt:   #818cf8;
-  --accent-dim:  rgba(99, 102, 241, 0.14);
-  --accent-glow: rgba(99, 102, 241, 0.38);
+  /* Accent — blue */
+  --accent:      #2563eb;
+  --accent-lt:   #3b82f6;
+  --accent-dim:  rgba(59, 130, 246, 0.12);
+  --accent-glow: rgba(59, 130, 246, 0.18);
 
   /* Status */
-  --green:       #22d97e;
-  --green-dim:   rgba(34, 217, 126, 0.14);
-  --red:         #ff4060;
-  --red-dim:     rgba(255, 64, 96, 0.14);
-  --yellow:      #ffc842;
-  --yellow-dim:  rgba(255, 200, 66, 0.14);
+  --green:       #16a34a;
+  --green-dim:   rgba(22, 163, 74, 0.14);
+  --red:         #dc2626;
+  --red-dim:     rgba(220, 38, 38, 0.14);
+  --yellow:      #d97706;
+  --yellow-dim:  rgba(217, 119, 6, 0.14);
 
   /* Misc */
   --radius:      20px;
   --radius-sm:   10px;
-  --shadow:      0 24px 64px rgba(0, 0, 16, 0.55);
+  --shadow:      0 24px 64px rgba(15, 23, 42, 0.12);
   --ease:        0.2s ease;
   --max-flow:    460px;
+}
+
+body {
+  background:                var(--bg);
+  color:                     var(--txt);
+  font-family:               -apple-system, BlinkMacSystemFont, 'Inter',
+                             'Segoe UI', Roboto, sans-serif;
+  font-size:                 16px;
+  line-height:               1.6;
+  -webkit-font-smoothing:    antialiased;
+  -moz-osx-font-smoothing:   grayscale;
 }
 
 /* ─── Base ────────────────────────────────────────────────────────────────── */
@@ -72,7 +83,7 @@ body {
   align-items:    center;
   justify-content: space-between;
   padding:        0.9rem 2rem;
-  background:     rgba(7, 7, 26, 0.82);
+  background:     rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(14px);
   border-bottom:  1px solid var(--border);
 }
@@ -118,7 +129,7 @@ body {
   width:     900px; height: 900px;
   top:       -280px; left: 50%;
   transform: translateX(-50%);
-  background: radial-gradient(circle, rgba(99,102,241,0.11) 0%, transparent 68%);
+  background: none;
   pointer-events: none;
 }
 
@@ -146,10 +157,7 @@ body {
   margin-bottom:  1.25rem;
 }
 .hero-heading .gradient {
-  background: linear-gradient(130deg, var(--accent-lt) 0%, #c084fc 52%, var(--accent) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--accent);
 }
 
 .hero-sub {
@@ -358,20 +366,22 @@ body {
   background:    var(--bg);
   border:        2px solid var(--accent);
   border-radius: var(--radius-sm);
-  padding:       0.9rem 2rem;
+  padding:       0.9rem 1.4rem;
   box-shadow:    0 0 28px var(--accent-glow);
   width:         100%;
-  max-width:     320px;
+  max-width:     100%;
   display:       flex;
   justify-content: center;
+  overflow-x:    auto;
 }
 .code-text {
-  font-family:     'SF Mono', 'Fira Code', 'Roboto Mono', monospace;
-  font-size:       2.4rem;
-  font-weight:     800;
-  letter-spacing:  0.28em;
+  font-family:     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size:       2rem;
+  font-weight:     700;
+  letter-spacing:  0.16em;
   color:           var(--accent-lt);
   user-select:     all;
+  white-space:     nowrap;
 }
 
 /* ─── Code input ─────────────────────────────────────────────────────────── */
@@ -565,18 +575,15 @@ body {
 }
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-lt) 55%, #c084fc 100%);
+  background: var(--accent);
   border-radius: 999px;
   transition: width 0.3s ease;
   position: relative;
   overflow: hidden;
 }
 .progress-fill::after {
-  content:    '';
-  position:   absolute; inset: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%);
-  background-size: 200% 100%;
-  animation:  shimmer 1.6s linear infinite;
+  content: '';
+  display: none;
 }
 .progress-foot { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--txt-muted); }
 

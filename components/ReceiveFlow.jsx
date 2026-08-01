@@ -41,14 +41,18 @@ export default function ReceiveFlow() {
   const isComplete        = useRef(false);
 
   // File reception state
-  const writerRef         = useRef(null);   // FileSystemWritableFileStream
-  const chunksRef         = useRef([]);     // memory fallback buffer
-  const writeQueue        = useRef(Promise.resolve()); // serialise async writes
-  const fileMetaRef       = useRef(null);   // { name, size, mimeType }
-  const receivedBytes     = useRef(0);
-  const startTime         = useRef(0);
-  const lastSpeedTime     = useRef(0);
-  const lastSpeedBytes    = useRef(0);
+  const writerRef             = useRef(null);   // FileSystemWritableFileStream
+  const chunksRef             = useRef([]);     // memory fallback buffer
+  const writeQueue            = useRef(Promise.resolve()); // serialise async writes
+  const fileMetaRef           = useRef(null);   // { name, size, mimeType, transferId? }
+  const pendingTransfersRef   = useRef([]);
+  const currentTransferIdRef  = useRef(null);
+  const transferInProgressRef = useRef(false);
+  const autoAcceptRef         = useRef(false);
+  const receivedBytes         = useRef(0);
+  const startTime             = useRef(0);
+  const lastSpeedTime         = useRef(0);
+  const lastSpeedBytes        = useRef(0);
 
   // ── Feature detection (client-only) ──────────────────────────────────────
   useEffect(() => {
@@ -58,32 +62,42 @@ export default function ReceiveFlow() {
 
   // ── Cleanup ───────────────────────────────────────────────────────────────
 
-  function closeAll() {
+  function closePeerConnection() {
     try { dcRef.current?.close();  } catch {}
     try { pcRef.current?.close();  } catch {}
-    try { wsRef.current?.close();  } catch {}
     dcRef.current = null;
     pcRef.current = null;
-    wsRef.current = null;
     iceCandidateQueue.current = [];
     remoteDescSet.current     = false;
   }
 
+  function closeSignalingConnection() {
+    try { wsRef.current?.close();  } catch {}
+    wsRef.current = null;
+  }
+
+  function closeAll() {
+    closePeerConnection();
+    closeSignalingConnection();
+  }
+
   function fail(msg) {
     if (isComplete.current) return;
-    closeAll();
     setError(msg);
     setStatus('error');
   }
 
   function reset() {
-    isComplete.current    = false;
-    writerRef.current     = null;
-    chunksRef.current     = [];
-    writeQueue.current    = Promise.resolve();
-    fileMetaRef.current   = null;
-    receivedBytes.current = 0;
-    closeAll();
+    isComplete.current      = false;
+    writerRef.current       = null;
+    chunksRef.current       = [];
+    writeQueue.current      = Promise.resolve();
+    fileMetaRef.current     = null;
+    pendingTransfersRef.current = [];
+    currentTransferIdRef.current = null;
+    transferInProgressRef.current = false;
+    autoAcceptRef.current  = false;
+    receivedBytes.current   = 0;
     setStatus('idle');
     setCodeInput('');
     setIncomingFile(null);
@@ -94,7 +108,51 @@ export default function ReceiveFlow() {
     setUsingFSA(false);
   }
 
+  function closeConnection() {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'close-connection' }));
+    }
+    closePeerConnection();
+    closeSignalingConnection();
+    reset();
+    setStatus('idle');
+  }
+
   // ── Chunk handling ────────────────────────────────────────────────────────
+
+  function queueTransfer(meta) {
+    if (!meta) return;
+    pendingTransfersRef.current.push(meta);
+  }
+
+  function setCurrentTransfer(meta) {
+    if (!meta) {
+      currentTransferIdRef.current = null;
+      fileMetaRef.current = null;
+      setIncomingFile(null);
+      return;
+    }
+
+    currentTransferIdRef.current = meta.transferId || null;
+    fileMetaRef.current = meta;
+    setIncomingFile({ name: meta.name, size: meta.size, mimeType: meta.mimeType });
+  }
+
+  async function startNextPendingTransfer() {
+    const next = pendingTransfersRef.current.shift();
+    if (!next) {
+      isComplete.current = true;
+      setStatus('complete');
+      return;
+    }
+
+    setCurrentTransfer(next);
+    setStatus('awaiting-accept');
+
+    if (autoAcceptRef.current) {
+      await acceptTransfer(next.transferId);
+    }
+  }
 
   function handleChunk(buffer) {
     receivedBytes.current += buffer.byteLength;
@@ -151,10 +209,16 @@ export default function ReceiveFlow() {
       setTimeout(() => URL.revokeObjectURL(url), 8_000);
     }
 
-    isComplete.current = true;
+    transferInProgressRef.current = false;
     setTransferred(fileMetaRef.current?.size || 0);
+
+    if (pendingTransfersRef.current.length > 0) {
+      await startNextPendingTransfer();
+      return;
+    }
+
+    isComplete.current = true;
     setStatus('complete');
-    closeAll();
   }
 
   // ── Data channel setup ────────────────────────────────────────────────────
@@ -169,9 +233,17 @@ export default function ReceiveFlow() {
           const msg = JSON.parse(data);
 
           if (msg.type === 'metadata') {
-            fileMetaRef.current = msg;
-            setIncomingFile({ name: msg.name, size: msg.size, mimeType: msg.mimeType });
+            if (transferInProgressRef.current || (fileMetaRef.current && !isComplete.current)) {
+              queueTransfer(msg);
+              return;
+            }
+
+            setCurrentTransfer(msg);
             setStatus('awaiting-accept');
+
+            if (autoAcceptRef.current) {
+              await acceptTransfer(msg.transferId);
+            }
 
           } else if (msg.type === 'transfer-complete') {
             await finishReceiving();
@@ -273,6 +345,13 @@ export default function ReceiveFlow() {
           if (!isComplete.current) fail('Sender disconnected before the transfer could complete.');
           break;
 
+        case 'connection-closed':
+          closePeerConnection();
+          closeSignalingConnection();
+          reset();
+          setStatus('idle');
+          break;
+
         case 'error':
           fail(msg.message);
           break;
@@ -284,17 +363,24 @@ export default function ReceiveFlow() {
 
   // ── Accept transfer (user-gesture required for FSA picker) ────────────────
 
-  async function acceptTransfer() {
+  async function acceptTransfer(transferId = null) {
     const meta = fileMetaRef.current;
     if (!meta) return;
 
+    if (typeof transferId === 'string' && currentTransferIdRef.current && currentTransferIdRef.current !== transferId) {
+      return;
+    }
+
     // Reset counters
-    receivedBytes.current  = 0;
-    startTime.current      = Date.now();
-    lastSpeedTime.current  = Date.now();
-    lastSpeedBytes.current = 0;
-    chunksRef.current      = [];
-    writeQueue.current     = Promise.resolve();
+    isComplete.current      = false;
+    transferInProgressRef.current = true;
+    autoAcceptRef.current   = true;
+    receivedBytes.current   = 0;
+    startTime.current       = Date.now();
+    lastSpeedTime.current   = Date.now();
+    lastSpeedBytes.current  = 0;
+    chunksRef.current       = [];
+    writeQueue.current      = Promise.resolve();
 
     // Try File System Access API (Chrome/Edge) — requires user activation
     if ('showSaveFilePicker' in window) {
@@ -316,7 +402,7 @@ export default function ReceiveFlow() {
     }
 
     // Signal sender: "we're ready, start sending chunks now"
-    dcRef.current?.send(JSON.stringify({ type: 'receiver-ready' }));
+    dcRef.current?.send(JSON.stringify({ type: 'receiver-ready', transferId: meta.transferId || null }));
     setStatus('receiving');
   }
 
@@ -472,8 +558,11 @@ export default function ReceiveFlow() {
               File saved to your Downloads folder.
             </p>
           )}
-          <button className="btn-secondary mt-4" onClick={reset}>
-            Receive Another File
+          <p className="flow-desc-sm mt-2">
+            The peer connection is still open and ready for the next file.
+          </p>
+          <button className="btn-secondary mt-4" onClick={closeConnection}>
+            Close Connection
           </button>
         </div>
       )}
@@ -483,9 +572,14 @@ export default function ReceiveFlow() {
         <div className="flow-step">
           <div className="flow-icon">❌</div>
           <div className="status-indicator error">{error}</div>
-          <button className="btn-secondary mt-4" onClick={reset}>
-            Try Again
-          </button>
+          <div className="mt-4" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+            <button className="btn-secondary" onClick={reset}>
+              Try Again
+            </button>
+            <button className="btn-secondary" onClick={closeConnection}>
+              Close Connection
+            </button>
+          </div>
         </div>
       )}
 

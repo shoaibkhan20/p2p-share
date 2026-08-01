@@ -174,6 +174,15 @@ function handleMessage(ws, raw, ip) {
       break;
     }
 
+    case 'close-connection': {
+      const room = rooms.get(ws.roomCode);
+      if (!room) return;
+      const peer = ws.roomRole === 'sender' ? room.receiver : room.sender;
+      safeSend(peer, { type: 'connection-closed' });
+      rooms.delete(ws.roomCode);
+      break;
+    }
+
     default:
       safeSend(ws, { type: 'error', message: `Unknown type: ${msg.type}` });
   }

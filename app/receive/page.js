@@ -1,5 +1,9 @@
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import ReceiveFlow from '../../components/ReceiveFlow';
+
+const ReceiveFlow = dynamic(() => import('../../components/ReceiveFlow'), {
+  ssr: false,
+});
 
 export const metadata = {
   title: 'Receive File',

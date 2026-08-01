@@ -33,6 +33,7 @@ export default function SendFlow() {
   const [speed,       setSpeed]       = useState(0);
   const [eta,         setEta]         = useState(Infinity);
   const [error,       setError]       = useState('');
+  const [queueCount,  setQueueCount]  = useState(0);
 
   // ── Refs (mutable, never cause re-render) ─────────────────────────────────
   const wsRef                = useRef(null);
@@ -44,30 +45,59 @@ export default function SendFlow() {
   const lastSpeedTime        = useRef(0);
   const lastSpeedBytes       = useRef(0);
   const isComplete           = useRef(false);   // guards against spurious errors after done
+  const fileQueueRef         = useRef([]);
+  const isSendingBatchRef    = useRef(false);
 
   // ── Cleanup ───────────────────────────────────────────────────────────────
 
-  function closeAll() {
+  function closePeerConnection() {
     try { dcRef.current?.close();  } catch {}
     try { pcRef.current?.close();  } catch {}
-    try { wsRef.current?.close();  } catch {}
     dcRef.current = null;
     pcRef.current = null;
-    wsRef.current = null;
     iceCandidateQueue.current = [];
     remoteDescSet.current     = false;
   }
 
+  function closeSignalingConnection() {
+    try { wsRef.current?.close();  } catch {}
+    wsRef.current = null;
+  }
+
+  function closeAll() {
+    closePeerConnection();
+    closeSignalingConnection();
+  }
+
   function fail(msg) {
     if (isComplete.current) return;   // ignore errors after a successful transfer
-    closeAll();
     setError(msg);
     setStatus('error');
   }
 
   function reset() {
     isComplete.current = false;
-    closeAll();
+    fileQueueRef.current = [];
+    isSendingBatchRef.current = false;
+    setQueueCount(0);
+    setFileName('');
+    setFileSize(0);
+    setTransferred(0);
+    setSpeed(0);
+    setEta(Infinity);
+    setError('');
+    setStatus(dcRef.current?.readyState === 'open' ? 'selecting' : 'idle');
+  }
+
+  function closeConnection() {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'close-connection' }));
+    }
+    closePeerConnection();
+    closeSignalingConnection();
+    fileQueueRef.current = [];
+    isSendingBatchRef.current = false;
+    setQueueCount(0);
     setStatus('idle');
     setCode('');
     setCopied(false);
@@ -181,6 +211,20 @@ export default function SendFlow() {
           fail('Receiver disconnected before the transfer could complete.');
           break;
 
+        case 'connection-closed':
+          closePeerConnection();
+          closeSignalingConnection();
+          setCode('');
+          setCopied(false);
+          setFileName('');
+          setFileSize(0);
+          setTransferred(0);
+          setSpeed(0);
+          setEta(Infinity);
+          setError('');
+          setStatus('idle');
+          break;
+
         case 'error':
           fail(msg.message);
           break;
@@ -205,14 +249,20 @@ export default function SendFlow() {
 
   // ── File transfer ─────────────────────────────────────────────────────────
 
-  async function sendFile(file) {
+  async function sendFile(file, { resetProgress = false } = {}) {
     const dc = dcRef.current;
     if (!dc || dc.readyState !== 'open') { fail('Data channel not ready.'); return; }
 
-    setFileName(file.name);
-    setFileSize(file.size);
-    setTransferred(0);
-    setStatus('transferring');
+    isComplete.current = false;
+
+    if (resetProgress) {
+      setFileName(file.name);
+      setFileSize(file.size);
+      setTransferred(0);
+      setStatus('transferring');
+    }
+
+    const transferId = `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
     // 1 ─ Set up handler FIRST so we don't miss receiver-ready
     const receiverReadyPromise = new Promise((resolve, reject) => {
@@ -222,25 +272,30 @@ export default function SendFlow() {
         if (typeof data === 'string') {
           let m;
           try { m = JSON.parse(data); } catch { return; }
-          if (m.type === 'receiver-ready') {
-            dc.onmessage = prev;   // restore (probably null)
+          if (m.type === 'receiver-ready' && m.transferId === transferId) {
+            dc.onmessage = prev;
             resolve();
-          } else if (m.type === 'error') {
+          } else if (m.type === 'error' && m.transferId === transferId) {
+            dc.onmessage = prev;
             reject(new Error(m.message));
           }
         }
       };
 
       // Safety timeout — 90 seconds for user to click "Accept"
-      setTimeout(() => reject(new Error('Receiver did not respond within 90 s')), 90_000);
+      setTimeout(() => {
+        dc.onmessage = prev;
+        reject(new Error('Receiver did not respond within 90 s'));
+      }, 90_000);
     });
 
     // 2 ─ Send metadata so receiver can show the file details
     dc.send(JSON.stringify({
-      type:     'metadata',
-      name:     file.name,
-      size:     file.size,
-      mimeType: file.type || 'application/octet-stream',
+      type:      'metadata',
+      transferId,
+      name:      file.name,
+      size:      file.size,
+      mimeType:  file.type || 'application/octet-stream',
     }));
 
     // 3 ─ Wait for receiver to click "Accept"
@@ -296,20 +351,52 @@ export default function SendFlow() {
 
     // 5 ─ Signal completion
     if (dc.readyState === 'open') {
-      dc.send(JSON.stringify({ type: 'transfer-complete' }));
+      dc.send(JSON.stringify({ type: 'transfer-complete', transferId }));
     }
 
-    isComplete.current = true;
     setTransferred(file.size);
-    setStatus('complete');
+    setStatus('selecting');
+  }
+
+  async function processQueue() {
+    if (isSendingBatchRef.current || fileQueueRef.current.length === 0) return;
+    isSendingBatchRef.current = true;
+
+    try {
+      while (fileQueueRef.current.length > 0) {
+        const file = fileQueueRef.current.shift();
+        if (!file) continue;
+        await sendFile(file, { resetProgress: true });
+        setQueueCount(fileQueueRef.current.length);
+      }
+
+      isComplete.current = true;
+      setQueueCount(0);
+      setStatus('selecting');
+    } catch (err) {
+      fail(err.message);
+    } finally {
+      isSendingBatchRef.current = false;
+    }
   }
 
   function onFileChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Reset the input so the same file can be sent again if needed
+    const selectedFiles = Array.from(e.target.files || []);
+    if (!selectedFiles.length) return;
+
     e.target.value = '';
-    sendFile(file).catch(err => fail(err.message));
+    const files = selectedFiles.filter(Boolean);
+    if (files.length === 0) return;
+
+    if (dcRef.current?.readyState !== 'open') {
+      fail('Data channel not ready.');
+      return;
+    }
+
+    fileQueueRef.current.push(...files);
+    setQueueCount(fileQueueRef.current.length);
+    setStatus('transferring');
+    processQueue().catch(err => fail(err.message));
   }
 
   function copyCode() {
@@ -392,11 +479,14 @@ export default function SendFlow() {
             <span className="dot-ok" />
             Peer-to-peer connection established
           </div>
-          <p className="flow-desc mt-2">Choose the file you want to send:</p>
+          <p className="flow-desc mt-2">Choose one or more files to send over the same connection:</p>
           <label className="file-picker mt-2">
-            <input type="file" onChange={onFileChange} />
-            <span className="file-picker-btn">📁 Choose File</span>
+            <input type="file" multiple onChange={onFileChange} />
+            <span className="file-picker-btn">📁 Choose Files</span>
           </label>
+          {queueCount > 0 && (
+            <p className="flow-desc-sm mt-2">{queueCount} file(s) queued to send</p>
+          )}
         </div>
       )}
 
@@ -414,6 +504,9 @@ export default function SendFlow() {
           <p className="flow-desc-sm mt-2">
             🔒 DTLS encrypted · direct peer-to-peer
           </p>
+          {queueCount > 0 && (
+            <p className="flow-desc-sm mt-2">Queued: {queueCount} file(s)</p>
+          )}
         </div>
       )}
 
@@ -429,9 +522,14 @@ export default function SendFlow() {
             speed={0}
             eta={0}
           />
-          <button className="btn-secondary mt-4" onClick={reset}>
-            Send Another File
-          </button>
+          <div className="mt-4" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+            <button className="btn-secondary" onClick={reset}>
+              Send More Files
+            </button>
+            <button className="btn-secondary" onClick={closeConnection}>
+              Close Connection
+            </button>
+          </div>
         </div>
       )}
 
@@ -440,9 +538,14 @@ export default function SendFlow() {
         <div className="flow-step">
           <div className="flow-icon">❌</div>
           <div className="status-indicator error">{error}</div>
-          <button className="btn-secondary mt-4" onClick={reset}>
-            Try Again
-          </button>
+          <div className="mt-4" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+            <button className="btn-secondary" onClick={reset}>
+              Try Again
+            </button>
+            <button className="btn-secondary" onClick={closeConnection}>
+              Close Connection
+            </button>
+          </div>
         </div>
       )}
 

@@ -1,5 +1,9 @@
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import SendFlow from '../../components/SendFlow';
+
+const SendFlow = dynamic(() => import('../../components/SendFlow'), {
+  ssr: false,
+});
 
 export const metadata = {
   title: 'Send File',

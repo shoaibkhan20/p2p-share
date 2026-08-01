@@ -6,7 +6,28 @@ const SendFlow = dynamic(() => import('../../components/SendFlow'), {
 });
 
 export const metadata = {
-  title: 'Send File',
+  title: 'Send File — P2P Share',
+  description:
+    'Send files securely over a direct browser-to-browser connection with P2P Share. No server upload, no installation, and no account required.',
+  keywords: [
+    'send file online',
+    'p2p file sending',
+    'secure file transfer',
+    'webrtc send file',
+    'browser to browser file share',
+  ],
+  openGraph: {
+    title: 'Send File — P2P Share',
+    description:
+      'Send files securely over a direct browser-to-browser connection with P2P Share. No server upload, no installation, and no account required.',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Send File — P2P Share',
+    description:
+      'Send files securely over a direct browser-to-browser connection with P2P Share. No server upload, no installation, and no account required.',
+  },
 };
 
 export default function SendPage() {

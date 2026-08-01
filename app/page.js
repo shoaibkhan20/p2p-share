@@ -2,6 +2,27 @@ import Link from 'next/link';
 
 export const metadata = {
   title: 'P2P Share — Instant Browser-to-Browser File Transfer',
+  description:
+    'Use P2P Share to send files directly between browsers with end-to-end encrypted WebRTC streaming. No account, no servers, instant browser-based transfers.',
+  keywords: [
+    'peer to peer file transfer',
+    'webrtc file sharing',
+    'secure browser file transfer',
+    'instant file sharing',
+    'encrypted p2p share',
+  ],
+  openGraph: {
+    title: 'P2P Share — Instant Browser-to-Browser File Transfer',
+    description:
+      'Use P2P Share to send files directly between browsers with end-to-end encrypted WebRTC streaming. No account, no servers, instant browser-based transfers.',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'P2P Share — Instant Browser-to-Browser File Transfer',
+    description:
+      'Use P2P Share to send files directly between browsers with end-to-end encrypted WebRTC streaming. No account, no servers, instant browser-based transfers.',
+  },
 };
 
 export default function HomePage() {

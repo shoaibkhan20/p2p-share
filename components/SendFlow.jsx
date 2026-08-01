@@ -113,14 +113,29 @@ export default function SendFlow() {
   useEffect(() => {
     const handleBeforeUnload = (event) => {
       if (wsRef.current?.readyState === WebSocket.OPEN || dcRef.current?.readyState === 'open') {
+        try {
+          wsRef.current.send(JSON.stringify({ type: 'close-connection' }));
+        } catch {}
+        closeAll();
         event.preventDefault();
         event.returnValue = '';
       }
     };
 
+    const handlePageHide = () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN || dcRef.current?.readyState === 'open') {
+        try {
+          wsRef.current.send(JSON.stringify({ type: 'close-connection' }));
+        } catch {}
+        closeAll();
+      }
+    };
+
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
       closeAll();
     };
   }, []);

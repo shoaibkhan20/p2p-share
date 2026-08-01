@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import SendFlow from '@/components/SendFlow';
+import SendFlow from '../../components/SendFlow';
 
 export const metadata = {
   title: 'Send File',

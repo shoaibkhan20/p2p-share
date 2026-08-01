@@ -18,7 +18,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import ProgressBar from './ProgressBar';
-import { getRTCConfig } from '@/lib/rtc-config';
+import { getRTCConfig } from '../lib/rtc-config';
 
 export default function ReceiveFlow() {
   // ── UI state ──────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import ReceiveFlow from '@/components/ReceiveFlow';
+import ReceiveFlow from '../../components/ReceiveFlow';
 
 export const metadata = {
   title: 'Receive File',

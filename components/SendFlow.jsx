@@ -16,7 +16,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import ProgressBar from './ProgressBar';
-import { getRTCConfig } from '@/lib/rtc-config';
+import { getRTCConfig } from '../lib/rtc-config';
 
 const CHUNK_SIZE    = 32  * 1024;  // 32 KB per chunk
 const BUFFER_HIGH   = 256 * 1024;  // pause if bufferedAmount > 256 KB
